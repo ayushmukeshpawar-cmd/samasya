@@ -29,7 +29,7 @@
             align-items: center;
             min-height: 100vh;
             padding: 20px;
-            gap: 20px; /* Gives spacing when both cards are open */
+            gap: 20px;
             flex-wrap: wrap;
         }
 
@@ -93,7 +93,7 @@
             font-weight: bold;
             cursor: pointer;
             transition: background 0.2s;
-            margin-bottom: 10px; /* Added separation for multiple buttons */
+            margin-bottom: 10px;
         }
 
         button:hover {
@@ -116,7 +116,6 @@
             font-weight: bold;
         }
 
-        /* Admin & User Table Styles */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -222,12 +221,10 @@
                     <th>Status</th>
                 </tr>
             </thead>
-            <tbody id="myComplaintsBody">
-                </tbody>
+            <tbody id="myComplaintsBody"></tbody>
         </table>
     </div>
 
-    <!-- ADMIN CARD (UPDATED WITH ACTION HEADER) -->
     <div id="adminCard" class="container admin-width hidden">
         <h2>Admin Dashboard (All Complaints)</h2>
         
@@ -257,11 +254,10 @@
                     <th>Department</th>
                     <th>Complaint Details</th>
                     <th>Status</th>
-                    <th>Action</th> <!-- EXACT CHANGE 1: Added header row -->
+                    <th>Action</th>
                 </tr>
             </thead>
-            <tbody id="complaintTableBody">
-                </tbody>
+            <tbody id="complaintTableBody"></tbody>
         </table>
     </div>
 
@@ -284,9 +280,10 @@
             }
         }
 
+        // UPDATED: Now verifies employee users securely via Firebase Auth
         window.handleLogin = async function(e) {
             e.preventDefault();
-            const user = document.getElementById("username").value;
+            const user = document.getElementById("username").value.trim();
             const pass = document.getElementById("password").value;
 
             if (currentRole === "admin") {
@@ -298,8 +295,19 @@
                     alert("Wrong Admin Credentials");
                 }
             } else {
-                document.getElementById("loginCard").classList.add("hidden");
-                document.getElementById("complaintCard").classList.remove("hidden");
+                try {
+                    // Formats simple inputs like "emp123" to match Firebase's email format requirement
+                    const employeeEmail = user.includes("@") ? user : `${user}@company.com`;
+                    
+                    // Call the globally exposed Firebase Auth function
+                    await window.signInWithEmailAndPassword(window.auth, employeeEmail, pass);
+                    
+                    document.getElementById("loginCard").classList.add("hidden");
+                    document.getElementById("complaintCard").classList.remove("hidden");
+                } catch (error) {
+                    console.error(error);
+                    alert("Login Failed: Invalid Employee ID or Password.");
+                }
             }
         }
 
@@ -320,7 +328,6 @@
                 alert("Complaint Submitted Successfully");
                 document.getElementById("complaintForm").reset();
                 
-                // Live refresh the list if they currently have their table open
                 if(!document.getElementById("myComplaintsCard").classList.contains("hidden")) {
                     loadMyComplaints(empId);
                 }
@@ -345,10 +352,11 @@
         }
     </script>
 
-    <!-- FIREBASE AND SCRIPT BLOCK (UPDATED) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-analytics.js";
+        // UPDATED: Added Firebase Authentication Modules
+        import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js"; 
         import {
           getFirestore,
           collection,
@@ -356,7 +364,7 @@
           getDocs,
           doc,
           updateDoc,
-          deleteDoc, // EXACT CHANGE 2: Added deleteDoc import
+          deleteDoc, 
           query,
           where
         } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
@@ -374,16 +382,18 @@
         const app = initializeApp(firebaseConfig);
         const analytics = getAnalytics(app);
         const db = getFirestore(app);
+        const auth = getAuth(app); // UPDATED: Initialized Auth Engine
 
-        // Making Firebase functions accessible to standard scope
+        // Exposing features to window scope securely
         window.db = db;
+        window.auth = auth; // UPDATED
+        window.signInWithEmailAndPassword = signInWithEmailAndPassword; // UPDATED
         window.addDoc = addDoc;
         window.collection = collection;
         window.query = query;
         window.where = where;
         window.getDocs = getDocs;
 
-        // Admin Status Update Engine
         window.updateStatus = async function(id, status) {
             try {
                 await updateDoc(doc(db, "complaints", id), { status: status });
@@ -394,13 +404,12 @@
             }
         }
 
-        // EXACT CHANGE 3: Added the delete handler logic
         window.deleteComplaint = async function(id) {
             if (confirm("Are you sure you want to permanently delete this complaint?")) {
                 try {
                     await deleteDoc(doc(db, "complaints", id));
                     alert("Complaint deleted successfully!");
-                    loadComplaintsFromFirebase(); // Dynamic refresh
+                    loadComplaintsFromFirebase();
                 } catch (error) {
                     console.error("Error deleting document: ", error);
                     alert("Failed to delete: " + error.message);
@@ -408,7 +417,6 @@
             }
         }
 
-        // FETCH ALL COMPLAINTS FOR ADMIN (EXACT CHANGE 4: Added dynamic delete button layout)
         window.loadComplaintsFromFirebase = async function() {
             const tableBody = document.getElementById("complaintTableBody");
             tableBody.innerHTML = "";
@@ -437,7 +445,6 @@
             });
         }
 
-        // FETCH SPECIFIC EMPLOYEE COMPLAINTS
         window.loadMyComplaints = async function(empId) {
             const complaintsBody = document.getElementById("myComplaintsBody");
             complaintsBody.innerHTML = "<tr><td colspan='3' style='text-align:center;'>Loading data...</td></tr>";
